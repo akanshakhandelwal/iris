@@ -6,6 +6,6 @@ from pathlib import Path
 
 t = (
     Trainer()
-    .model_train_optuna()
+    .model_stacking()
     
 )
