@@ -11,8 +11,11 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from loguru import logger
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.naive_bayes import GaussianNB 
+from catboost import CatBoostClassifier
 from mlxtend.classifier import StackingClassifier
+import xgboost as xgb
+from xgboost import XGBClassifier
+import lightgbm as lgbm
 
 class Trainer(BaseModel):
      
@@ -87,4 +90,44 @@ class Trainer(BaseModel):
       print('Best parameters: %s' % grid.best_params_)
       print('Accuracy: %.2f' % grid.best_score_)
 
-   
+   def model_stacking_optuna(self):
+      self.data_setup()
+      study = optuna.create_study(direction="maximize")
+      study.optimize(self.objective_optuna, n_trials=10)
+    
+   def objective_optuna(self,trial):
+      
+
+      classifier1 = CatBoostClassifier(n_estimators=8000)
+      classifier2 = lgbm.LGBMClassifier(objective='binary',
+                                      boosting_type='gbdt',
+                                      num_leaves=6,
+                                      max_depth=2)
+     
+      params = {
+            'max_depth': trial.suggest_int("max_depth", 1, 10, 1),
+            'gamma': trial.suggest_float('gamma', 0,1),
+            'reg_alpha' : trial.suggest_float('reg_alpha', 0,50),
+            'reg_lambda' : trial.suggest_float('reg_lambda', 10,100),
+            'colsample_bytree' : trial.suggest_float('colsample_bytree', 0,1),
+            'min_child_weight' : trial.suggest_float('min_child_weight', 0, 5),
+            'learning_rate': trial.suggest_float('learning_rate', 0, .15),
+            'random_state': 5,
+            'n_estimators' : 8000,
+            'max_bin' : trial.suggest_int('max_bin', 200, 550, 1),
+            'objective': 'binary:logistic',
+            'use_label_encoder':False}
+         
+      stacked_model = StackingClassifier(classifiers=[classifier1, classifier2], 
+                             meta_classifier=XGBClassifier(params)
+                             )
+    
+    
+      stacked_model.fit(self.x, self.y)
+      pred = stacked_model.predict(self.x)
+      
+      accuracy = accuracy_score(self.y,pred)
+         
+      print(accuracy)
+      
+      return accuracy
