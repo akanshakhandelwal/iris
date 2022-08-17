@@ -17,26 +17,28 @@ from mlxtend.classifier import StackingClassifier
 class Trainer(BaseModel):
      
    train: Optional[pd.DataFrame]
+   x:Optional[pd.DataFrame]
+   y:Optional[np.ndarray]
 
    class Config:
         arbitrary_types_allowed = True
 
    def data_setup(self):
         self.train = load_iris()
+        self.x = self.train.data
+        self.y= self.train.target
         logger.add("optunalogs.log")
         return self
     
    def model_train(self):
         self.data_setup()
-        X = self.train.data
-        y = self.train.target
         fold=1
         kfold = StratifiedKFold(n_splits=3, shuffle=True, random_state=8)
-        for train, validation in kfold.split(X, y):
-             X_train = X[train]
-             X_val = X[validation]
-             y_train = y[train]
-             y_val = y[validation]
+        for train, validation in kfold.split(self.x,self.y):
+             X_train = self.x[train]
+             X_val = self.x[validation]
+             y_train = self.y[train]
+             y_val = self.y[validation]
              model = RandomForestClassifier()
              model.fit(X_train, y_train)
              val_pred = model.predict(X_val)
@@ -50,12 +52,10 @@ class Trainer(BaseModel):
         return self
       
    def objective(self,trial):
-
-      x = self.train.data
-      y = self.train.target    
+  
       rf_max_depth = trial.suggest_int('rf_max_depth', 2, 32, log=True)
       classifier_obj = RandomForestClassifier(max_depth=rf_max_depth, n_estimators=10)
-      score = cross_val_score(classifier_obj, x, y, n_jobs=-1, cv=3)
+      score = cross_val_score(classifier_obj, self.x, self.y, n_jobs=-1, cv=3)
       accuracy = score.mean()
       logger.info(accuracy)
             
@@ -66,12 +66,11 @@ class Trainer(BaseModel):
       study = optuna.create_study(direction="maximize")
       study.optimize(self.objective, n_trials=100)
       logger.info(study.best_trial)
+      return self
      
 
    def model_stacking(self):
       self.data_setup()
-      x = self.train.data
-      y = self.train.target
       classifier1 = KNeighborsClassifier(n_neighbors=1)
       classifier2 = RandomForestClassifier(random_state=1)
       logistic_regression = LogisticRegression()
@@ -84,7 +83,7 @@ class Trainer(BaseModel):
                     param_grid=params, 
                     cv=5,
                     refit=True)
-      grid.fit(x, y)
+      grid.fit(self.x, self.y)
       print('Best parameters: %s' % grid.best_params_)
       print('Accuracy: %.2f' % grid.best_score_)
 
