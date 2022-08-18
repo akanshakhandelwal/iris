@@ -16,6 +16,7 @@ from mlxtend.classifier import StackingClassifier
 import xgboost as xgb
 from xgboost import XGBClassifier
 import lightgbm as lgbm
+import wandb
 
 class Trainer(BaseModel):
      
@@ -30,6 +31,7 @@ class Trainer(BaseModel):
         self.train = load_iris()
         self.x = self.train.data
         self.y= self.train.target
+        wandb.init(project="iris-project")
         logger.add("optunalogs.log")
         return self
     
@@ -93,16 +95,16 @@ class Trainer(BaseModel):
    def model_stacking_optuna(self):
       self.data_setup()
       study = optuna.create_study(direction="maximize")
-      study.optimize(self.objective_optuna, n_trials=10)
+      study.optimize(self.objective_optuna, n_trials=3)
     
    def objective_optuna(self,trial):
       
 
-      classifier1 = CatBoostClassifier(n_estimators=8000)
+      classifier1 = CatBoostClassifier(n_estimators=2)
       classifier2 = lgbm.LGBMClassifier(objective='binary',
                                       boosting_type='gbdt',
                                       num_leaves=6,
-                                      max_depth=2)
+                                      max_depth=2,n_estimators=4)
      
       params = {
             'max_depth': trial.suggest_int("max_depth", 1, 10, 1),
@@ -113,7 +115,7 @@ class Trainer(BaseModel):
             'min_child_weight' : trial.suggest_float('min_child_weight', 0, 5),
             'learning_rate': trial.suggest_float('learning_rate', 0, .15),
             'random_state': 5,
-            'n_estimators' : 8000,
+            'n_estimators' : 10,
             'max_bin' : trial.suggest_int('max_bin', 200, 550, 1),
             'objective': 'binary:logistic',
             'use_label_encoder':False}
@@ -121,13 +123,15 @@ class Trainer(BaseModel):
       stacked_model = StackingClassifier(classifiers=[classifier1, classifier2], 
                              meta_classifier=XGBClassifier(params)
                              )
-    
-    
+      logger.info(trial.number)
+      logger.info(trial.params)
+      
       stacked_model.fit(self.x, self.y)
       pred = stacked_model.predict(self.x)
       
       accuracy = accuracy_score(self.y,pred)
          
-      print(accuracy)
+      logger.info(accuracy)
+      wandb.log({'accuracy' : accuracy})
       
       return accuracy
